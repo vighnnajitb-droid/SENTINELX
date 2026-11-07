@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sentinelx
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://user:password@db:5432/sentinelx
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SECRET_KEY=your_secret_key_here_for_jwt
+      - ALGORITHM=HS256
+      - API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - db
+    command: >
+      sh -c "alembic upgrade head && python seed_db.py && 
+             uvicorn backend.main:app --host 0.0.0.0 --port 8000 & 
+             streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0"
+
+  n8n:
+    image: n8nio/n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/London
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  postgres_data:
+  n8n_data:

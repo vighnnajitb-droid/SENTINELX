@@ -1,0 +1,7 @@
+timestamp,source_ip,destination_ip,event_type,status,user,details
+2023-10-27T11:00:00Z,192.168.1.10,10.0.0.5,login,success,alice,normal_login
+2023-10-27T11:05:00Z,198.51.100.22,10.0.0.5,login,failed,admin,invalid_password
+2023-10-27T11:15:00Z,192.168.1.10,10.0.0.12,file_access,success,alice,read_doc
+2023-10-27T11:20:00Z,198.51.100.22,10.0.0.5,login,failed,root,invalid_password
+2023-10-27T11:25:00Z,198.51.100.22,10.0.0.5,login,success,root,valid_password
+2023-10-27T11:30:00Z,10.0.0.5,10.0.0.200,api_call,success,root,delete_user

@@ -1,0 +1,24 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+streamlit>=1.25.0
+sqlalchemy>=2.0.0
+alembic>=1.11.0
+psycopg2-binary>=2.9.0
+pydantic>=2.0.0
+plotly>=5.15.0
+langgraph>=0.0.10
+langchain>=0.0.300
+langchain-core>=0.0.10
+python-dotenv>=1.0.0
+pytest>=7.4.0
+httpx>=0.24.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+asyncpg>=0.28.0
+pandas>=2.0.0 # adding just in case for plotly
+openai>=1.0.0
+
+requests>=2.31.0
+PyJWT>=2.8.0
+langchain-openai>=0.1.0

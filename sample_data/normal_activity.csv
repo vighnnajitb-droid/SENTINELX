@@ -1,0 +1,6 @@
+timestamp,source_ip,destination_ip,event_type,status,user
+2023-10-27T08:00:00Z,192.168.1.10,10.0.0.5,login,success,alice
+2023-10-27T08:05:00Z,192.168.1.10,10.0.0.12,file_access,success,alice
+2023-10-27T08:15:00Z,192.168.1.15,10.0.0.5,login,success,bob
+2023-10-27T08:20:00Z,192.168.1.15,10.0.0.8,api_call,success,bob
+2023-10-27T09:00:00Z,192.168.1.20,10.0.0.5,login,success,charlie

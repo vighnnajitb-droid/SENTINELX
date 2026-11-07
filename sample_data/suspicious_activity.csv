@@ -1,0 +1,7 @@
+timestamp,source_ip,destination_ip,event_type,status,user,details
+2023-10-27T10:00:00Z,203.0.113.45,10.0.0.5,login,failed,admin,invalid_password
+2023-10-27T10:00:02Z,203.0.113.45,10.0.0.5,login,failed,admin,invalid_password
+2023-10-27T10:00:05Z,203.0.113.45,10.0.0.5,login,failed,admin,invalid_password
+2023-10-27T10:00:10Z,203.0.113.45,10.0.0.5,login,success,admin,valid_password
+2023-10-27T10:01:00Z,10.0.0.5,10.0.0.50,port_scan,dropped,system,port_22_scanned
+2023-10-27T10:05:00Z,10.0.0.5,10.0.0.100,data_exfiltration,success,admin,large_transfer

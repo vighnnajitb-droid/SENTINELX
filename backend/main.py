@@ -10,7 +10,7 @@ import json
 import tempfile
 import requests
 
-from database.session import get_db
+from database.session import get_db, SessionLocal
 from database.models import User, Incident, SecurityEvent, Investigation, AgentRun, Approval, AuditLog
 from utils.parser import parse_log_file, prepare_security_events
 from agents.graph import run_investigation
@@ -58,19 +58,45 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # --- Setup basic user if not exists ---
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+@app.on_event("startup")
+def create_judge_account():
+    username = os.getenv("ADMIN_USERNAME")
+    password = os.getenv("ADMIN_PASSWORD")
 
-@app.post("/api/v1/auth/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not pwd_context.verify(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    if not username or not password:
+        print("Judge account setup skipped: credentials not configured.")
+        return
 
+    db = SessionLocal()
+
+    try:
+        existing_user = db.query(User).filter(
+            User.username == username
+        ).first()
+
+        if existing_user:
+            print(f"Judge account '{username}' already exists.")
+            return
+
+        hashed_password = pwd_context.hash(password)
+
+        judge = User(
+            username=username,
+            hashed_password=hashed_password,
+            is_active=True
+        )
+
+        db.add(judge)
+        db.commit()
+
+        print(f"Judge account '{username}' created successfully.")
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
 # --- Log Upload & Incidents ---
 
 @app.post("/api/v1/logs/upload")

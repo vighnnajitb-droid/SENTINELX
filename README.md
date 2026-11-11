@@ -62,6 +62,7 @@ Run the automated test suite using pytest:
 pytest tests/
 ```
 ## user and password
-```User: sentinelx_judge
+```
+User: sentinelx_judge
 Password: demo123#
 ```

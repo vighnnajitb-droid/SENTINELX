@@ -61,7 +61,7 @@ Run the automated test suite using pytest:
 ```bash
 pytest tests/
 ```
-## user and password
+## User and Password
 ```
 User: sentinelx_judge
 Password: demo123#

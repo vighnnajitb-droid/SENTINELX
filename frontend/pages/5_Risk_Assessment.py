@@ -69,6 +69,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Shared premium SENTINELX visual system
+from pathlib import Path as _Path
+_theme_file = _Path(__file__).resolve().parents[1] / "theme.css"
+try:
+    st.markdown(f"<style>{_theme_file.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+except OSError:
+    pass
+
+
 if "token" not in st.session_state or not st.session_state["token"]:
     st.warning("Please log in from the main page.")
     st.stop()

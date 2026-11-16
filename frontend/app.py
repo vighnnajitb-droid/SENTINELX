@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/api/v1")
+API_URL = os.getenv("API_URL", "https://sentinelx-3.onrender.com/api/v1")
 
 st.set_page_config(
     page_title="SENTINELX | Security Operations",
@@ -251,6 +251,15 @@ hr {
 </style>
 """, unsafe_allow_html=True)
 
+# Shared premium SENTINELX visual system
+from pathlib import Path as _Path
+_theme_file = _Path(__file__).resolve().parent / "theme.css"
+try:
+    st.markdown(f"<style>{_theme_file.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+except OSError:
+    pass
+
+
 
 # -------------------- AUTHENTICATION --------------------
 
@@ -266,7 +275,7 @@ def login(username, password):
                 "username": username,
                 "password": password
             },
-            timeout=20
+            timeout=120
         )
 
         if response.status_code == 200:
@@ -287,14 +296,15 @@ def login(username, password):
                 "Please check the backend service."
             )
 
-    except requests.RequestException:
-        st.error("Unable to connect to the backend. Please try again.")
+    except requests.RequestException as error:
+        st.error("Backend connection error")
+        st.code(f"Error type: {type(error).__name__}")
+        st.code(str(error))
 
 
 def logout():
     st.session_state["token"] = None
     st.rerun()
-
 
 # -------------------- BRAND HEADER --------------------
 

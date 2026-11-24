@@ -19,7 +19,7 @@ python-multipart>=0.0.6
 asyncpg>=0.28.0
 pandas>=2.0.0 # adding just in case for plotly
 openai>=1.0.0
-
+psycopg[binary]
 requests>=2.31.0
 PyJWT>=2.8.0
 langchain-openai>=0.1.0

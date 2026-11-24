@@ -1,4 +1,6 @@
+
 services:
+  # SENTINELX FastAPI Backend
   - type: web
     name: sentinelx-backend
     env: python
@@ -9,11 +11,20 @@ services:
         fromDatabase:
           name: sentinelx-db
           property: connectionString
+
       - key: OPENAI_API_KEY
         sync: false
+
       - key: SECRET_KEY
         generateValue: true
 
+      - key: ADMIN_USERNAME
+        value: admin
+
+      - key: ADMIN_PASSWORD
+        generateValue: true
+
+  # SENTINELX Streamlit Frontend
   - type: web
     name: sentinelx-frontend
     env: python

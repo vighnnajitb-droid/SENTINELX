@@ -24,3 +24,11 @@ __pycache__/
 
 *.backup
 check_admin_login.py
+
+reset_admin.py
+*.bak
+*.pre_redesign.bak
+*.log
+*.sqlite
+*.sqlite3
+secrets/

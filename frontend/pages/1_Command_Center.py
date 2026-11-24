@@ -1,894 +1,228 @@
-import os
-from pathlib import Path
+"""SENTINELX Command Center.
+
+Every number on this page comes from the backend:
+    GET /api/v1/dashboard/summary   incident / event / approval aggregates
+    GET /api/v1/health              live health checks
+Anything that cannot be retrieved is rendered as an explicit "unavailable"
+state. See sentinelx_ui/metrics.py for the documented index methodology.
+"""
 from datetime import datetime
 
-import requests
 import streamlit as st
-import pandas as pd
-import plotly.express as px
+
+from sentinelx_ui import api, components as C, metrics as M
+from sentinelx_ui.navigation import page_setup
+
+# A threat-row click stores the target and reruns the app; the page switch
+# happens here, outside any fragment, so it works with auto-refresh on or off.
+_goto = st.session_state.pop("_sx_goto", None)
+if _goto:
+    st.session_state["selected_incident_id"] = _goto
+    st.switch_page("pages/3_Investigation_Center.py")
+
+page_setup("Command Center", "🛡️", dashboard=True)
+
+THREAT_ROWS = 4
+REFRESH_CHOICES = [15, 30, 60, 120, 300]
+AGENTS = [
+    ("01", "Detection Agent", "Analyzes incoming security events and identifies suspicious activity.", "#35BFFF"),
+    ("02", "Investigation Agent", "Connects evidence and builds incident investigation context.", "#A78BFA"),
+    ("03", "Threat Intelligence Agent", "Enriches findings with available threat intelligence.", "#22D3EE"),
+    ("04", "Risk Assessment Agent", "Evaluates severity, confidence and potential impact.", "#FBBF24"),
+    ("05", "Audit Agent", "Maintains evidence records and accountability.", "#4ADE80"),
+    ("06", "Response Agent", "Coordinates human-approved defensive response workflows.", "#FB923C"),
+]
 
 
-# ============================================================
-# PAGE CONFIGURATION
-# Keep this as the first Streamlit command on this page.
-# ============================================================
-
-st.set_page_config(
-    page_title="SENTINELX | Command Center",
-    page_icon="🛡️",
-    layout="wide"
-)
-
-API_URL = os.getenv(
-    "API_URL",
-    "http://127.0.0.1:8000/api/v1"
-).rstrip("/")
+def md_safe(text, limit: int = 58) -> str:
+    """Button labels render Markdown; neutralise it and truncate."""
+    text = (text or "Untitled incident").replace("\n", " ")
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
+    for ch in "\\`*_{}[]()#+-!|~<>$":
+        text = text.replace(ch, "\\" + ch)
+    return text
 
 
-# ============================================================
-# PREMIUM SOC THEME
-# ============================================================
-
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;600;700;800&display=swap');
-
-.stApp {
-    background:
-        radial-gradient(ellipse at 5% 0%, rgba(0,140,255,.12), transparent 35%),
-        radial-gradient(ellipse at 95% 90%, rgba(0,220,255,.07), transparent 35%),
-        #070D18;
-    color: #EAF2FF;
-    font-family: 'Inter', sans-serif;
-}
-
-header[data-testid="stHeader"] {
-    background: rgba(7,13,24,.8);
-}
-
-.block-container {
-    max-width: 1550px;
-    padding-top: 2rem;
-    padding-bottom: 3rem;
-}
-
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg,#0D192B,#080F1D);
-    border-right: 1px solid #1D3552;
-}
-
-h1, h2, h3, h4 {
-    color: #F0F6FF !important;
-    font-family: 'Inter', sans-serif;
-}
-
-p, label, .stCaption {
-    color: #9CB0C9;
-}
-
-.soc-header {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(115deg,#102642,#0B1B30 75%);
-    border: 1px solid #285071;
-    border-radius: 19px;
-    padding: 30px;
-    margin-bottom: 25px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.22);
-}
-
-.soc-header:after {
-    content: "";
-    position: absolute;
-    width: 230px;
-    height: 230px;
-    right: -65px;
-    top: -115px;
-    border-radius: 50%;
-    border: 1px solid rgba(43,190,255,.25);
-    box-shadow: 0 0 0 30px rgba(43,190,255,.025),
-                0 0 0 60px rgba(43,190,255,.02);
-}
-
-.brand {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: #40C7FF;
-    margin-bottom: 13px;
-}
-
-.soc-title {
-    font-family: 'Orbitron', sans-serif;
-    font-size: clamp(25px,3vw,38px);
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: #F2F7FF;
-    margin-bottom: 10px;
-}
-
-.soc-title span {
-    color: #32BFFF;
-}
-
-.soc-subtitle {
-    color: #A2B8D2;
-    font-size: 13px;
-    line-height: 1.8;
-}
-
-.live-pill {
-    display: inline-block;
-    background: rgba(22,190,135,.10);
-    border: 1px solid rgba(54,229,162,.35);
-    border-radius: 30px;
-    padding: 7px 13px;
-    color: #52E5AE;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1px;
-}
-
-.section-heading {
-    color: #EAF3FF;
-    font-size: 19px;
-    font-weight: 750;
-    margin-top: 25px;
-    margin-bottom: 5px;
-}
-
-.section-caption {
-    color: #829AB7;
-    font-size: 12px;
-    margin-bottom: 17px;
-}
-
-.metric-card {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(145deg,#12233A,#0C1728);
-    border: 1px solid #233F5E;
-    border-radius: 15px;
-    padding: 19px;
-    min-height: 135px;
-    box-shadow: 0 8px 25px rgba(0,0,0,.14);
-    transition: all .2s ease;
-}
-
-.metric-card:hover {
-    border-color: #32BFFF;
-    transform: translateY(-3px);
-}
-
-.metric-label {
-    color: #91A9C5;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.4px;
-}
-
-.metric-value {
-    font-size: 34px;
-    font-weight: 800;
-    margin-top: 13px;
-    line-height: 1.1;
-}
-
-.metric-note {
-    color: #708AA8;
-    font-size: 10px;
-    margin-top: 9px;
-}
-
-.metric-accent {
-    position: absolute;
-    width: 75px;
-    height: 75px;
-    border-radius: 50%;
-    right: -25px;
-    bottom: -35px;
-    opacity: .10;
-}
-
-.panel {
-    background: linear-gradient(145deg,#101F33,#0B1728);
-    border: 1px solid #203A58;
-    border-radius: 15px;
-    padding: 18px;
-    min-height: 100px;
-}
-
-.panel-title {
-    color: #E8F2FF;
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-
-.panel-caption {
-    color: #829AB7;
-    font-size: 11px;
-}
-
-.agent-card {
-    background: linear-gradient(145deg,#12243A,#0C1829);
-    border: 1px solid #23415F;
-    border-radius: 13px;
-    padding: 17px;
-    min-height: 125px;
-    transition: all .2s ease;
-}
-
-.agent-card:hover {
-    border-color: #31BFFF;
-    transform: translateY(-3px);
-}
-
-.agent-number {
-    color: #36BFFF;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 11px;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-}
-
-.agent-name {
-    color: #EAF3FF;
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 7px;
-}
-
-.agent-description {
-    color: #8EA6C1;
-    font-size: 11px;
-    line-height: 1.6;
-}
-
-.status-strip {
-    background: rgba(12,29,48,.8);
-    border: 1px solid #1E3C5B;
-    border-radius: 12px;
-    padding: 14px 17px;
-    color: #A7BED7;
-    font-size: 11px;
-}
-
-div.stButton > button {
-    background: linear-gradient(100deg,#087BC5,#12A9E9);
-    color: white;
-    border: 1px solid #25B9F5;
-    border-radius: 9px;
-    min-height: 42px;
-    font-weight: 700;
-    transition: .2s ease;
-}
-
-div.stButton > button:hover {
-    background: linear-gradient(100deg,#139CE9,#26C4FF);
-    color: white;
-    border-color: #70DFFF;
-}
-
-.stTextInput input,
-.stSelectbox div[data-baseweb="select"] > div {
-    background: #0B192B;
-    color: #EAF3FF;
-    border-color: #294765;
-    border-radius: 8px;
-}
-
-[data-testid="stDataFrame"] {
-    border: 1px solid #203A58;
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-div[data-testid="stMetric"] {
-    background: #101F33;
-    border: 1px solid #203A58;
-    border-radius: 12px;
-    padding: 12px;
-}
-
-hr {
-    border-color: #203A58;
-}
-
-.footer {
-    text-align: center;
-    color: #607B99;
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    padding-top: 25px;
-}
-</style>
-""", unsafe_allow_html=True)
+def panel_title(title: str, info: str = "") -> None:
+    tip = f'<span class="sx-info" title="{C.esc(info)}" tabindex="0">i</span>' if info else ""
+    st.markdown(f'<div class="sx-ptitle">{C.esc(title)}{tip}</div>', unsafe_allow_html=True)
 
 
-# Load the shared theme if it exists.
-theme_file = Path(__file__).resolve().parents[1] / "theme.css"
-
-try:
-    if theme_file.is_file():
-        theme_css = theme_file.read_text(encoding="utf-8")
-        st.markdown(
-            f"<style>{theme_css}</style>",
-            unsafe_allow_html=True
-        )
-except OSError:
-    pass
-
-
-# ============================================================
-# AUTHENTICATION
-# ============================================================
-
-TOKEN = st.session_state.get("token")
-
-if not TOKEN:
-    st.warning("Please log in from the main page.")
-    st.stop()
-
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}"
-}
-
-
-# ============================================================
-# API
-# No token-based cache: avoids retaining authenticated incident
-# responses in Streamlit's shared data cache.
-# ============================================================
-
-def fetch_incidents(api_url, headers):
-    """Fetch incident records and return (records, error, status)."""
-
+def go_to_incident(incident_id: str) -> None:
+    st.session_state["_sx_goto"] = incident_id
     try:
-        response = requests.get(
-            f"{api_url}/incidents",
-            headers=headers,
-            timeout=(5, 20)
-        )
-
-        if response.status_code != 200:
-            return (
-                [],
-                f"Backend returned HTTP {response.status_code}.",
-                response.status_code
-            )
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return [], "Backend returned invalid JSON.", response.status_code
-
-        # Expected backend response is a list.
-        # Also accept a wrapped list for compatibility.
-        if isinstance(payload, dict):
-            payload = payload.get("incidents", [])
-
-        if not isinstance(payload, list):
-            return [], "Unexpected incident response format.", response.status_code
-
-        # Ignore malformed records instead of crashing the dashboard.
-        records = [
-            item for item in payload
-            if isinstance(item, dict)
-        ]
-
-        return records, None, response.status_code
-
-    except requests.exceptions.Timeout:
-        return [], "The backend request timed out. Try refreshing in a moment.", None
-
-    except requests.exceptions.ConnectionError:
-        return [], "Could not connect to the backend. Check the API URL and service status.", None
-
-    except requests.exceptions.RequestException:
-        return [], "A network error occurred while contacting the backend.", None
-
-
-# ============================================================
-# HEADER
-# ============================================================
-
-header_col1, header_col2 = st.columns([5, 1])
-
-with header_col1:
-    st.markdown("""
-    <div class="soc-header">
-        <div class="brand">SENTINELX / SECURITY OPERATIONS</div>
-        <div class="soc-title">COMMAND <span>CENTER</span></div>
-        <div class="soc-subtitle">
-            Autonomous Incident Response Network<br>
-            Detect. Investigate. Verify. Respond.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with header_col2:
-    st.write("")
-    st.write("")
-
-    st.markdown(
-        '<div class="live-pill">● AUTHENTICATED SESSION</div>',
-        unsafe_allow_html=True
-    )
-
-    if st.button("↻ Refresh Data", use_container_width=True):
+        st.rerun(scope="app")
+    except TypeError:       # Streamlit without fragment scopes
         st.rerun()
 
 
-# ============================================================
-# FETCH INCIDENTS
-# ============================================================
+with st.container(key="sx_frame"):
+    # ------------------------------------------------------------- top bar
+    with st.container(key="sx_bar"):
+        st.markdown('<div class="sx-brand" style="flex-direction:row;align-items:baseline;gap:12px"><b>SENTINEL<span>X</span> Command Center</b>'
+                    '<small>Autonomous Incident Response Network</small></div>', unsafe_allow_html=True)
 
-incidents, api_error, api_status = fetch_incidents(
-    API_URL,
-    HEADERS
-)
+    with st.container(key="sx_filters"):
+        f = st.columns([1.5, 1.3, 1.0, 0.9, 0.9, 0.9, 1.7])
+        sev_filter = f[0].multiselect("Severity filter", ["critical", "high", "medium", "low"],
+                                      key="sx_sev", placeholder="All severities", label_visibility="collapsed")
+        status_filter = f[1].selectbox("Status filter", ["all", "open", "investigating", "resolved"], key="sx_status",
+                                       label_visibility="collapsed",
+                                       format_func=lambda s: "All statuses" if s == "all" else f"Status: {s}")
+        days = f[2].selectbox("Trend window", [7, 14, 30], index=1, key="sx_days", label_visibility="collapsed",
+                           format_func=lambda d: f"Last {d} days")
+        auto = f[3].toggle("Auto-refresh", value=False, key="sx_auto",
+                           help="Off by default. When on, only this dashboard re-fetches, at the chosen interval.")
+        interval = f[4].selectbox("Every", REFRESH_CHOICES, index=1, key="sx_interval", disabled=not auto,
+                                  label_visibility="collapsed",
+                                  format_func=lambda s: f"Every {s}s" if s < 60 else f"Every {s // 60}m")
+        refresh_clicked = f[5].button("↻ Refresh", key="sx_refresh", use_container_width=True)
+        asof_slot = f[6].empty()
 
-if api_status == 401:
-    st.error("Your session has expired. Please log in again.")
+    if refresh_clicked:   # a manual refresh must always bypass the short dedupe cache
+        st.session_state.pop("_sx_cache", None)
 
-    if st.button("Return to Login"):
-        st.session_state.pop("token", None)
-        st.rerun()
+    def render_body() -> None:
+        with st.spinner("Loading telemetry…"):
+            data = api.load_dashboard(days)
 
-    st.stop()
+        if data["auth_error"]:
+            st.error("Your session has expired or this account lacks access. Please log in again.")
+            if st.button("Return to Login", key="sx_relogin"):
+                api.end_session()
+                st.rerun()
+            return
 
-if api_status == 403:
-    st.error("Your account does not have permission to view incidents.")
-    st.stop()
+        summary = data["summary"] or {}
+        inc, events = summary.get("incidents") or {}, summary.get("events") or {}
+        asof_slot.markdown(
+            f'<div class="sx-asof">Updated {datetime.fromtimestamp(data["fetched_at"]):%H:%M:%S}<br>'
+            f'{"auto every " + str(interval) + "s" if auto else "manual refresh"}</div>', unsafe_allow_html=True)
 
-if api_error:
-    st.error(api_error)
+        for msg in data["errors"]:
+            st.markdown(f'<div class="sx-banner{" err" if not data["reachable"] else ""}">{C.esc(msg)}</div>',
+                        unsafe_allow_html=True)
+        if events.get("truncated"):
+            st.markdown(f'<div class="sx-banner">Event-level metrics use the most recent {events.get("scanned", 0):,} '
+                        f'of {events.get("total", 0):,} events.</div>', unsafe_allow_html=True)
 
-df = pd.DataFrame(incidents)
+        # ---------------------------------------------------- SECTION A
+        with st.container(key="sx_secA"):
+            a1, a2, a3 = st.columns([1.5, 1.0, 1.0])
 
-# Ensure expected fields can be safely accessed.
-if not df.empty:
-    for column in ["title", "description", "status", "severity", "created_at"]:
-        if column not in df.columns:
-            df[column] = None
+            with a1, st.container(key="sx_p_timeline"):
+                panel_title("Incident Response Timeline",
+                            "Stages are derived from stored records: detection = incident created, analysis = first "
+                            "investigation started, containment = approved response action, resolution = incident "
+                            "resolved. A stage without a supporting record shows 'unavailable'.")
+                timelines = summary.get("timelines") or []
+                chosen = None
+                if timelines:
+                    ids = [t["incident_id"] for t in timelines]
+                    default = next((i for i, t in enumerate(timelines) if t["status"] not in ("resolved", "closed")), 0)
+                    labels = {t["incident_id"]: f'{(t["severity"] or "unscored").capitalize()} · {(t["title"] or "Untitled")[:44]}'
+                              for t in timelines}
+                    pick = st.selectbox("Incident", ids, index=default, key="sx_tl_pick",
+                                        label_visibility="collapsed", format_func=lambda i: labels.get(i, i))
+                    chosen = next((t for t in timelines if t["incident_id"] == pick), None)
+                total = inc.get("total")
+                st.markdown(C.timeline(chosen, [
+                    ("Active Incidents", inc.get("active"), total),
+                    ("Containment in Progress", inc.get("containment_in_progress"), total),
+                    ("Resolved Today", inc.get("resolved_today"), total),
+                    ("Escalated Cases", inc.get("escalated"), total)]), unsafe_allow_html=True)
 
+            sev = M.severity_index(inc.get("unresolved_by_severity") if inc else None,
+                                   inc.get("unscored_unresolved", 0))
+            with a2, st.container(key="sx_p_sev"):
+                panel_title("Threat Severity", sev["method"])
+                st.markdown(C.severity_gauge(sev), unsafe_allow_html=True)
+                if sev.get("unscored"):
+                    st.caption(f'{sev["unscored"]} unresolved incident(s) without a severity are excluded.')
 
-# ============================================================
-# METRIC CALCULATIONS
-# ============================================================
+            health = M.health_score(data["server_checks"], data["reachable"], data["latency_ms"])
+            with a3, st.container(key="sx_p_health"):
+                panel_title("System Health", health["method"])
+                st.markdown(C.health_gauge(health), unsafe_allow_html=True)
+                chips = "".join(
+                    f'<span class="sx-chip {C.esc(c["status"])}" title="{C.esc(c.get("detail", ""))}">'
+                    f'<i></i>{C.esc(c["label"])}</span>' for c in health.get("checks", []))
+                st.markdown(f'<div class="sx-chips">{chips}</div>', unsafe_allow_html=True)
 
-if not df.empty:
-    status_series = (
-        df["status"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
+        # ---------------------------------------------------- SECTION B
+        with st.container(key="sx_secB"):
+            b1, b2 = st.columns([1.12, 1.4])
+            with b1, st.container(key="sx_p_net"):
+                panel_title("Network Traffic",
+                            "Source/destination pairs reconstructed from stored security events. Hosts are classified "
+                            "internal/external by private IP ranges. Red marks hosts flagged by the threat-intel agent "
+                            "and flows that contain intrusion-type events.")
+                net = summary.get("network")
+                st.markdown(C.network_svg(net), unsafe_allow_html=True)
+                st.markdown(f'<div class="sx-netcap">{C.esc(C.network_caption(net) if summary else "Network data unavailable.")}</div>',
+                            unsafe_allow_html=True)
+            with b2, st.container(key="sx_p_alerts"):
+                panel_title("Alert Statistics",
+                            "Each card states its own unit. Sparklines show daily counts over the selected window (UTC).")
+                st.markdown(C.alert_grid(summary), unsafe_allow_html=True)
 
-    severity_series = (
-        df["severity"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
+        # ---------------------------------------------------- SECTION C
+        with st.container(key="sx_secC"):
+            c1, c2 = st.columns([1.0, 3.3])
+            with c1:
+                st.markdown(C.robot_img(), unsafe_allow_html=True)
+            with c2, st.container(key="sx_threats"):
+                ratios = [3.3, 2.2, 2.2, 1.1, 2.0]
+                h = st.columns(ratios)
+                h[0].markdown('<div class="sx-th t">Top Threats</div>', unsafe_allow_html=True)
+                for col, name in zip(h[1:], ["Type", "Source", "Severity", "Status"]):
+                    col.markdown(f'<div class="sx-th">{name}</div>', unsafe_allow_html=True)
 
-    total = len(df)
-    open_count = int((status_series == "open").sum())
-    critical = int((severity_series == "critical").sum())
-    resolved = int((status_series == "resolved").sum())
+                threats = summary.get("top_threats") or []
+                if sev_filter:
+                    threats = [t for t in threats if (t.get("severity") or "") in sev_filter]
+                if status_filter != "all":
+                    threats = [t for t in threats if t.get("status") == status_filter]
 
-else:
-    total = 0
-    open_count = 0
-    critical = 0
-    resolved = 0
+                if not summary:
+                    st.markdown('<div class="sx-empty">Incident data unavailable.</div>', unsafe_allow_html=True)
+                elif not threats:
+                    st.markdown('<div class="sx-empty">No incidents match the current filters.</div>', unsafe_allow_html=True)
+                for t in threats[:THREAT_ROWS]:
+                    r = st.columns(ratios)
+                    if r[0].button(f"▸ {md_safe(t.get('title'))}", key=f"sx_open_{t['id']}",
+                                   help="Open in Investigation Center"):
+                        go_to_incident(t["id"])
+                    types = ", ".join(t.get("event_types") or []) or "Unclassified"
+                    srcs = ", ".join(t.get("sources") or []) or "—"
+                    r[1].markdown(f'<div class="sx-cell mut" title="{C.esc(types)}">{C.esc(types)}</div>', unsafe_allow_html=True)
+                    r[2].markdown(f'<div class="sx-cell mut" title="{C.esc(srcs)}">{C.esc(srcs)}</div>', unsafe_allow_html=True)
+                    r[3].markdown(C.sev_pill(t.get("severity")), unsafe_allow_html=True)
+                    r[4].markdown(C.status_pill(t.get("status"), t.get("awaiting_approval")), unsafe_allow_html=True)
+                if len(threats) > THREAT_ROWS:
+                    st.caption(f"Showing {THREAT_ROWS} of {len(threats)} matching incidents. "
+                               "Open the Investigation Center for the full list.")
 
-
-# ============================================================
-# OPERATIONAL OVERVIEW
-# ============================================================
-
-st.markdown(
-    '<div class="section-heading">Operational Overview</div>'
-    '<div class="section-caption">Incident metrics and current workload</div>',
-    unsafe_allow_html=True
-)
-
-metrics = [
-    ("TOTAL INCIDENTS", total, "#4DBBFF", "All recorded incidents"),
-    ("OPEN INCIDENTS", open_count, "#FBBF24", "Awaiting resolution"),
-    ("CRITICAL ALERTS", critical, "#FB7185", "Critical severity records"),
-    ("RESOLVED", resolved, "#4ADE80", "Successfully resolved")
-]
-
-metric_cols = st.columns(4)
-
-for col, (label, value, color, note) in zip(metric_cols, metrics):
-    with col:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-label">{label}</div>
-            <div class="metric-value" style="color:{color}">{value}</div>
-            <div class="metric-note">{note}</div>
-            <div class="metric-accent" style="background:{color}"></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-# ============================================================
-# ANALYTICS
-# ============================================================
-
-st.markdown(
-    '<div class="section-heading">Threat Intelligence Overview</div>'
-    '<div class="section-caption">Severity distribution and recent incident activity</div>',
-    unsafe_allow_html=True
-)
-
-chart_col, activity_col = st.columns([1, 1], gap="large")
-
-
-# ---------------- SEVERITY CHART ----------------
-
-with chart_col:
-    st.markdown("""
-    <div class="panel">
-        <div class="panel-title">Incident Severity Distribution</div>
-        <div class="panel-caption">Breakdown of recorded incident severity</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if not df.empty and df["severity"].notna().any():
-
-        severity_data = (
-            df["severity"]
-            .fillna("Unknown")
-            .astype(str)
-            .str.strip()
-            .replace("", "Unknown")
-            .str.title()
-            .value_counts()
-            .rename_axis("Severity")
-            .reset_index(name="Count")
-        )
-
-        severity_colors = {
-            "Critical": "#FB7185",
-            "High": "#F97316",
-            "Medium": "#FBBF24",
-            "Low": "#4ADE80",
-            "Unknown": "#64748B"
-        }
-
-        fig = px.pie(
-            severity_data,
-            names="Severity",
-            values="Count",
-            hole=0.70,
-            color="Severity",
-            color_discrete_map=severity_colors
-        )
-
-        fig.update_traces(
-            textposition="outside",
-            textinfo="percent",
-            marker=dict(
-                line=dict(
-                    color="#0B1728",
-                    width=3
-                )
-            )
-        )
-
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(
-                color="#DCEBFA",
-                family="Inter"
-            ),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-0.15,
-                xanchor="center",
-                x=0.5
-            ),
-            margin=dict(t=15, b=35, l=15, r=15),
-            height=340,
-            showlegend=True
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
+    # A fragment means only the dashboard reruns on the timer, never the whole app.
+    if auto and hasattr(st, "fragment"):
+        st.fragment(render_body, run_every=max(int(interval), api.MIN_REFRESH_SECONDS))()
     else:
-        st.info("Severity analytics will appear when incident data is available.")
+        if auto:
+            st.caption("Auto-refresh needs Streamlit 1.37 or newer.")
+        render_body()
 
-
-# ---------------- RECENT ACTIVITY ----------------
-
-with activity_col:
-    st.markdown("""
-    <div class="panel">
-        <div class="panel-title">Recent Incident Activity</div>
-        <div class="panel-caption">Latest records received by SENTINELX</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if not df.empty:
-        display_columns = [
-            column for column in
-            ["title", "status", "severity", "created_at"]
-            if column in df.columns
-        ]
-
-        if display_columns:
-            recent_df = df[display_columns].copy()
-
-            if "created_at" in recent_df.columns:
-                recent_df["_sort_time"] = pd.to_datetime(
-                    recent_df["created_at"],
-                    errors="coerce",
-                    utc=True
-                )
-
-                recent_df = (
-                    recent_df
-                    .sort_values(
-                        "_sort_time",
-                        ascending=False,
-                        na_position="last"
-                    )
-                    .drop(columns=["_sort_time"])
-                )
-
-            recent_df = recent_df.head(8)
-
-            st.dataframe(
-                recent_df,
-                use_container_width=True,
-                hide_index=True,
-                height=340
-            )
-        else:
-            st.info("No displayable incident fields found.")
-
-    else:
-        st.info("No incident records have been received yet.")
-
-
-# ============================================================
-# AI AGENT NETWORK
-# ============================================================
-
-st.markdown("---")
-
-st.markdown(
-    '<div class="section-heading">Autonomous AI Agent Network</div>'
-    '<div class="section-caption">Six specialized agents coordinate the defensive incident response workflow</div>',
-    unsafe_allow_html=True
-)
-
-agents = [
-    (
-        "01",
-        "Detection Agent",
-        "Analyzes incoming security events and identifies suspicious activity.",
-        "#35BFFF"
-    ),
-    (
-        "02",
-        "Investigation Agent",
-        "Connects evidence and builds incident investigation context.",
-        "#A78BFA"
-    ),
-    (
-        "03",
-        "Threat Intelligence Agent",
-        "Enriches findings with available threat intelligence.",
-        "#22D3EE"
-    ),
-    (
-        "04",
-        "Risk Assessment Agent",
-        "Evaluates severity, confidence and potential impact.",
-        "#FBBF24"
-    ),
-    (
-        "05",
-        "Audit Agent",
-        "Maintains evidence records and accountability.",
-        "#4ADE80"
-    ),
-    (
-        "06",
-        "Response Agent",
-        "Coordinates human-approved defensive response workflows.",
-        "#FB923C"
-    )
-]
-
+# ------------------------------------------------------ six-agent network
+st.markdown('<div class="section-heading" style="margin-top:18px">Autonomous AI Agent Network</div>'
+            '<div class="section-caption">Six specialized agents coordinate the defensive incident response workflow</div>',
+            unsafe_allow_html=True)
 agent_cols = st.columns(3)
-
-for index, (number, name, description, color) in enumerate(agents):
+for index, (number, name, description, color) in enumerate(AGENTS):
     with agent_cols[index % 3]:
-        st.markdown(f"""
-        <div class="agent-card">
-            <div class="agent-number" style="color:{color}">
-                AGENT / {number}
-            </div>
-            <div class="agent-name">{name}</div>
-            <div class="agent-description">{description}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="agent-card"><div class="agent-number" style="color:{color}">AGENT / {number}</div>'
+            f'<div class="agent-title">{name}</div><div class="agent-desc">{description}</div></div>',
+            unsafe_allow_html=True)
 
-        st.write("")
-
-
-# ============================================================
-# INCIDENT EXPLORER
-# ============================================================
-
-st.markdown("---")
-
-st.markdown(
-    '<div class="section-heading">Incident Explorer</div>'
-    '<div class="section-caption">Search, filter and inspect available incident records</div>',
-    unsafe_allow_html=True
-)
-
-if not df.empty:
-
-    search_col, severity_col, status_col = st.columns([2, 1, 1])
-
-    with search_col:
-        search_text = st.text_input(
-            "Search incidents",
-            placeholder="Search by title or incident details...",
-            key="incident_search"
-        )
-
-    # Normalize filter values to avoid errors with nulls.
-    severity_values = (
-        df["severity"]
-        .fillna("Unknown")
-        .astype(str)
-        .str.strip()
-        .replace("", "Unknown")
-    )
-
-    status_values = (
-        df["status"]
-        .fillna("Unknown")
-        .astype(str)
-        .str.strip()
-        .replace("", "Unknown")
-    )
-
-    with severity_col:
-        severity_options = ["All"] + sorted(
-            severity_values.unique().tolist()
-        )
-
-        selected_severity = st.selectbox(
-            "Severity",
-            severity_options,
-            key="incident_severity_filter"
-        )
-
-    with status_col:
-        status_options = ["All"] + sorted(
-            status_values.unique().tolist()
-        )
-
-        selected_status = st.selectbox(
-            "Status",
-            status_options,
-            key="incident_status_filter"
-        )
-
-    filtered_df = df.copy()
-
-    if selected_severity != "All":
-        filtered_df = filtered_df[
-            filtered_df["severity"]
-            .fillna("Unknown")
-            .astype(str)
-            .str.strip()
-            .replace("", "Unknown")
-            == selected_severity
-        ]
-
-    if selected_status != "All":
-        filtered_df = filtered_df[
-            filtered_df["status"]
-            .fillna("Unknown")
-            .astype(str)
-            .str.strip()
-            .replace("", "Unknown")
-            == selected_status
-        ]
-
-    if search_text.strip():
-        searchable_columns = [
-            column for column in
-            ["title", "description", "status", "severity"]
-            if column in filtered_df.columns
-        ]
-
-        if searchable_columns:
-            search_mask = (
-                filtered_df[searchable_columns]
-                .fillna("")
-                .astype(str)
-                .apply(
-                    lambda column: column.str.contains(
-                        search_text.strip(),
-                        case=False,
-                        regex=False
-                    )
-                )
-                .any(axis=1)
-            )
-
-            filtered_df = filtered_df[search_mask]
-
-    st.caption(
-        f"Showing {len(filtered_df)} of {len(df)} incidents"
-    )
-
-    st.dataframe(
-        filtered_df,
-        use_container_width=True,
-        hide_index=True,
-        height=400
-    )
-
-else:
-    st.info(
-        "Your incident explorer is ready. "
-        "No incident records are currently available."
-    )
-
-
-# ============================================================
-# PLATFORM STATUS
-# ============================================================
-
-st.markdown("---")
-
-st.markdown("""
-<div class="status-strip">
-    <b style="color:#42C7FF;">SENTINELX PLATFORM PRINCIPLES</b><br><br>
-    ◈ Evidence-backed analysis
-    &nbsp;&nbsp; | &nbsp;&nbsp;
-    ◈ Human oversight for consequential actions
-    &nbsp;&nbsp; | &nbsp;&nbsp;
-    ◈ Auditable incident records
-</div>
-""", unsafe_allow_html=True)
-
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.markdown("---")
-
-st.markdown(f"""
-<div class="footer">
-    SENTINELX SECURITY OPERATIONS<br>
-    DETECT. INVESTIGATE. VERIFY. RESPOND.<br><br>
-    LAST DASHBOARD RENDER: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-</div>
-""", unsafe_allow_html=True)
-
-
-
+st.markdown('<div class="footer">SENTINELX · human-in-the-loop defensive response · '
+            'all metrics are read from the live backend</div>', unsafe_allow_html=True)

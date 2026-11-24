@@ -14,6 +14,8 @@ from database.session import get_db, SessionLocal
 from database.models import User, Incident, SecurityEvent, Investigation, AgentRun, Approval, AuditLog
 from utils.parser import parse_log_file, prepare_security_events
 from agents.graph import run_investigation
+from backend.dashboard import build_dashboard_router
+from backend.console import build_console_router
 
 # For a real implementation, you'd use passlib and jose properly, here is a mock for brevity
 import jwt
@@ -32,8 +34,13 @@ app.add_middleware(
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your_secret_key_here_for_jwt")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable must be configured."
+    )
 
 # --- Auth Dependencies ---
 def create_access_token(data: dict):
@@ -54,6 +61,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+# --- Dashboard (read-only, additive): /api/v1/dashboard/summary and /api/v1/health ---
+app.include_router(build_dashboard_router(get_current_user))
+
+# --- Console (read-only, additive): events, investigations, agents, audit, system info ---
+app.include_router(build_console_router(get_current_user, {
+    "version": app.version,
+    "algorithm": ALGORITHM,
+    "token_minutes": 30,   # matches create_access_token above
+    "secret_key_is_default": SECRET_KEY == "your_secret_key_here_for_jwt",
+}))
 
 # --- Setup basic user if not exists ---
 
@@ -236,7 +254,8 @@ def get_incidents(current_user: User = Depends(get_current_user), db: Session = 
         "title": inc.title, 
         "status": inc.status, 
         "severity": inc.severity,
-        "created_at": inc.created_at
+        "created_at": inc.created_at,
+        "updated_at": inc.updated_at
     } for inc in incidents]
 
 @app.get("/api/v1/incidents/{incident_id}")
@@ -252,6 +271,8 @@ def get_incident(incident_id: str, current_user: User = Depends(get_current_user
         "description": incident.description,
         "status": incident.status,
         "severity": incident.severity,
+        "created_at": incident.created_at,
+        "updated_at": incident.updated_at,
         "events_count": len(events),
         "events": [
             {

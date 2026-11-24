@@ -26,9 +26,9 @@ class RiskAssessmentOutput(BaseModel):
     justification: str = Field(description="Reasoning for the severity and confidence")
 
 class AuditOutput(BaseModel):
-    evidence_verified: bool = False
-    discrepancies: List[str] = Field(default_factory=list)
-    audit_trail_valid: bool = False
+    evidence_verified: bool = Field(default=False, description="Whether the evidence was independently verified")
+    discrepancies: List[str] = Field(default_factory=list, description="List of discrepancies or issues found")
+    audit_trail_valid: bool = Field(default=False, description="Whether the audit trail hash chain is valid")
 class ResponseOutput(BaseModel):
     recommendations: List[str] = Field(description="Defensive response recommendations")
     requires_human_approval: bool = Field(description="Whether the actions require human approval")

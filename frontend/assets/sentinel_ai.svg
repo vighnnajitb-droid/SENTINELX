@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 300" width="260" height="300">
+<defs>
+<linearGradient id="hd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a4a86"/><stop offset=".35" stop-color="#0d1f45"/><stop offset="1" stop-color="#040b1c"/></linearGradient>
+<linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fa8ff" stop-opacity=".75"/><stop offset="1" stop-color="#5fa8ff" stop-opacity="0"/></linearGradient>
+<linearGradient id="bd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16305f"/><stop offset="1" stop-color="#050c1e"/></linearGradient>
+<radialGradient id="vs" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#bff4ff"/><stop offset=".5" stop-color="#19b7ff"/><stop offset="1" stop-color="#0a5fd8"/></radialGradient>
+<filter id="gl" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+<filter id="gs" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2"/></filter>
+</defs>
+<ellipse cx="130" cy="140" rx="120" ry="130" fill="#087BFF" opacity=".10" filter="url(#gl)"/>
+<!-- shoulders / torso -->
+<path d="M0 300 L0 262 Q8 226 58 212 L98 200 L162 200 L202 212 Q252 226 260 262 L260 300 Z" fill="url(#bd)" stroke="#1d5fc4" stroke-width="1.4"/>
+<path d="M58 212 L98 200 L110 232 L70 246 Z" fill="#0b1b3c" stroke="#1d5fc4" stroke-opacity=".7"/>
+<path d="M202 212 L162 200 L150 232 L190 246 Z" fill="#0b1b3c" stroke="#1d5fc4" stroke-opacity=".7"/>
+<path d="M104 262 L130 246 L156 262" fill="none" stroke="#00A8FF" stroke-width="2" opacity=".8"/>
+<circle cx="130" cy="256" r="4" fill="#00D9FF" filter="url(#gs)"/>
+<!-- neck -->
+<path d="M104 190 L156 190 L162 214 L98 214 Z" fill="#081530" stroke="#164a96" stroke-width="1"/>
+<g stroke="#164a96" stroke-width="1"><line x1="108" y1="198" x2="152" y2="198"/><line x1="106" y1="206" x2="154" y2="206"/></g>
+<!-- ear modules -->
+<rect x="30" y="94" width="22" height="46" rx="9" fill="#0a1a3a" stroke="#1d6fe0" stroke-width="1.5"/>
+<rect x="208" y="94" width="22" height="46" rx="9" fill="#0a1a3a" stroke="#1d6fe0" stroke-width="1.5"/>
+<rect x="36" y="106" width="9" height="22" rx="4" fill="#00A8FF" opacity=".9" filter="url(#gs)"/>
+<rect x="215" y="106" width="9" height="22" rx="4" fill="#00A8FF" opacity=".9" filter="url(#gs)"/>
+<!-- helmet -->
+<path d="M130 16 C 70 16 44 58 44 108 C 44 150 56 176 80 190 L 112 196 L 148 196 L 180 190 C 204 176 216 150 216 108 C 216 58 190 16 130 16 Z" fill="url(#hd)" stroke="#2f7fe6" stroke-width="1.8"/>
+<path d="M130 22 C 84 24 60 58 56 100" fill="none" stroke="url(#hl)" stroke-width="5" stroke-linecap="round"/>
+<path d="M130 22 L130 62" stroke="#1d5fc4" stroke-width="2"/><path d="M118 30 L130 22 L142 30" fill="none" stroke="#1d5fc4" stroke-width="1.5"/>
+<!-- faceplate -->
+<path d="M66 92 Q130 70 194 92 L186 150 Q130 176 74 150 Z" fill="#030a18" stroke="#164a96" stroke-width="1.4"/>
+<!-- visor eyes -->
+<path d="M78 108 L116 118 L112 134 L82 128 Z" fill="#19b7ff" opacity=".55" filter="url(#gl)"/>
+<path d="M182 108 L144 118 L148 134 L178 128 Z" fill="#19b7ff" opacity=".55" filter="url(#gl)"/>
+<path d="M78 108 L116 118 L112 134 L82 128 Z" fill="url(#vs)"/>
+<path d="M182 108 L144 118 L148 134 L178 128 Z" fill="url(#vs)"/>
+<!-- mouth grille -->
+<g stroke="#1d5fc4" stroke-width="1.6" stroke-linecap="round"><line x1="108" y1="158" x2="152" y2="158"/><line x1="112" y1="166" x2="148" y2="166"/><line x1="118" y1="174" x2="142" y2="174"/></g>
+<path d="M66 92 Q130 70 194 92" fill="none" stroke="#00A8FF" stroke-width="1.6" opacity=".8"/>
+</svg>

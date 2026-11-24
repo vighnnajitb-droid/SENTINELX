@@ -33,3 +33,33 @@ SENTINELX uses a modern Python-based microservice architecture, separating the p
 5. **Workflow Automation (n8n)**
    - Webhook integrations defined in `n8n-workflows/`.
    - Handles external notifications (Slack mock) and periodic reporting without cluttering core agent logic.
+
+
+## Command Center (redesign) — data contracts and methodology
+
+Frontend package: `frontend/sentinelx_ui/` (`theme.py`, `api.py`, `metrics.py`, `components.py`, `dashboard.css`);
+global tokens live in `frontend/theme.css`. Every page calls `apply_theme()`; no page carries its own CSS block.
+
+Additive backend endpoints (both require a bearer token **and** an active account):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/dashboard/summary?days=14` | Incident/event/approval aggregates, daily series, network edges, top threats, per-incident timelines |
+| `GET /api/v1/health` | Live checks: database round trip, agent graph compiles, LLM mode (mock = degraded), audit hash-link consistency |
+
+`GET /api/v1/incidents` and `GET /api/v1/incidents/{id}` gained an `updated_at` field (additive).
+Pure aggregation logic is in `backend/dashboard_logic.py` (unit-tested without a database).
+
+**Threat Severity** is a *normalized index (0-100)*, not a measured percentage: mean of weights
+(low 25, medium 50, high 75, critical 100) over unresolved incidents that have a severity.
+
+**System Health** = (ok checks + 0.5 x degraded checks) / total checks, over the server checks plus measured
+API reachability and latency. Any degraded check caps the state at Warning, any failed check at Degraded;
+a failed database check, an unreachable API, or a score under 50 is Critical.
+
+**Alert Statistics units differ per card and are labelled on the card:** Total/Critical = incident records,
+Intrusion = events (`port_scan` + failed logins), Malware = events typed as malware (Unavailable when the
+pipeline recorded none: it has no malware classifier), Pending Approvals = approval rows.
+
+Auto-refresh is off by default; when enabled it runs in an `st.fragment` at >= 15 s, and reruns inside a 10 s
+window reuse the per-session cached response.

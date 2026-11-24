@@ -4,16 +4,25 @@ from backend.main import app
 
 client = TestClient(app)
 
+
 def test_integration_workflow():
-    # Force the startup event to run to create the user
     from seed_db import seed_admin
-    seed_admin("admin", "admin")
-    
+    import uuid
+
+    test_username = f"sentinel_test_{uuid.uuid4().hex[:8]}"
+    test_password = f"TestOnly_{uuid.uuid4().hex}"
+
+    seed_admin(test_username, test_password)
+
     # 1. Login
-    resp = client.post("/api/v1/auth/login", data={"username": "admin", "password": "admin"})
+    resp = client.post(
+        "/api/v1/auth/login",
+        data={"username": test_username, "password": test_password}
+    )
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     token = resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+
     
     # 2. Upload Log
     with open("sample_data/suspicious_activity.csv", "rb") as f:

@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Dict, Any, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -6,6 +7,8 @@ from langchain_core.output_parsers import PydanticOutputParser
 from agents.schemas import InvestigationOutput, AgentInput
 from agents.prompts import INVESTIGATION_PROMPT
 import os
+
+logger = logging.getLogger("sentinelx.agents")
 
 class InvestigationAgent:
     def __init__(self):

@@ -1,315 +1,93 @@
+"""Reports: generate and export an incident report from real backend data.
 
-import os
-import json
-import requests
+Data: GET /incidents/{id}, /incidents/{id}/investigations, /audit?incident_id=,
+and the original GET /reports/{id} (kept inside the JSON export for compatibility).
+Exports: JSON (as before, now with the full report), Markdown, printable HTML.
+"""
 import streamlit as st
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/api/v1")
+from sentinelx_ui import api, reporting
+from sentinelx_ui.navigation import header, page_setup, show_api_error
+from sentinelx_ui.views import reports as V
+from sentinelx_ui.widgets import empty_state, notice, section_title
 
-st.set_page_config(
-    page_title="SENTINELX | Incident Reports",
-    page_icon="📊",
-    layout="wide"
-)
+page_setup("Reports", "📄")
+header("Reports", "Generate an evidence-based incident report and export it.", eyebrow="INTELLIGENCE / REPORTS")
 
-st.markdown("""
-<style>
-.stApp {
-    background: #080f1c;
-    color: #e5edf8;
-}
-.block-container {
-    padding-top: 2rem;
-    max-width: 1450px;
-}
-.hero {
-    background: linear-gradient(120deg,#101f35,#142d49);
-    padding: 25px;
-    border: 1px solid #263e5d;
-    border-radius: 14px;
-    margin-bottom: 22px;
-}
-.hero h1 {
-    color: #f1f6ff;
-    margin-bottom: 5px;
-}
-.hero p {
-    color: #9eb2ca;
-    margin-bottom: 0;
-}
-.panel {
-    background: #101b2b;
-    border: 1px solid #243750;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 15px;
-}
-.metric-card {
-    background: #101b2b;
-    border: 1px solid #243750;
-    border-radius: 11px;
-    padding: 17px;
-}
-.metric-label {
-    color: #91a8c4;
-    font-size: 12px;
-    letter-spacing: 1px;
-}
-.metric-value {
-    color: #f1f6ff;
-    font-size: 25px;
-    font-weight: 700;
-    margin-top: 5px;
-}
-.small-label {
-    color: #91a8c4;
-    font-size: 12px;
-    letter-spacing: 1px;
-}
-div.stButton > button {
-    background: #1677d2;
-    color: white;
-    border: 0;
-    border-radius: 8px;
-    min-height: 43px;
-    font-weight: 600;
-}
-div.stButton > button:hover {
-    background: #258ce9;
-    color: white;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Shared premium SENTINELX visual system
-from pathlib import Path as _Path
-_theme_file = _Path(__file__).resolve().parents[1] / "theme.css"
-try:
-    st.markdown(f"<style>{_theme_file.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
-except OSError:
-    pass
-
-
-if "token" not in st.session_state or not st.session_state["token"]:
-    st.warning("Please log in from the main page.")
-    st.stop()
-
-headers = {
-    "Authorization": f"Bearer {st.session_state['token']}"
-}
-
-st.markdown("""
-<div class="hero">
-    <div class="small-label">SENTINELX / REPORTING & ANALYTICS</div>
-    <h1>📊 Incident Reporting Center</h1>
-    <p>Generate, review and export evidence-backed security incident reports.</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Fetch incidents
-try:
-    with st.spinner("Loading incident records..."):
-        inc_resp = requests.get(
-            f"{API_URL}/incidents",
-            headers=headers,
-            timeout=20
-        )
-
-    if inc_resp.status_code != 200:
-        st.error(
-            f"Incident request failed ({inc_resp.status_code}): "
-            f"{inc_resp.text[:500]}"
-        )
-        st.stop()
-
-    incidents = inc_resp.json()
-
-    if not isinstance(incidents, list):
-        st.error("Unexpected incident data received.")
-        st.stop()
-
-except requests.RequestException as e:
-    st.error(f"Backend connection failed: {e}")
-    st.stop()
-
+inc = api.incident_list()
+if not inc.ok:
+    show_api_error(inc, "incidents")
+incidents = [i for i in (inc.data or []) if i.get("id")]
 if not incidents:
-    st.info("No incidents available. Upload logs to generate your first report.")
+    st.markdown(empty_state("No incidents to report on", "Upload logs in the Log Explorer to create an incident."), unsafe_allow_html=True)
     st.stop()
 
-incident_options = {
-    f"{item.get('title', 'Untitled Incident')} "
-    f"({str(item.get('id', ''))[:8]})": item.get("id")
-    for item in incidents
-    if item.get("id")
-}
+labels = {i["id"]: f'{(i.get("severity") or "unscored").capitalize()} · {i.get("title") or "Untitled"} · {i["id"][:8]}' for i in incidents}
+goto = st.session_state.pop("selected_incident_id", None)
+if goto in labels:
+    st.session_state["rp_pick"] = goto
 
-if not incident_options:
-    st.warning("No valid incident identifiers found.")
-    st.stop()
-
-st.markdown("### 🎯 Report Configuration")
-
-selected_label = st.selectbox(
-    "Select incident for report generation",
-    options=list(incident_options.keys())
-)
-
-incident_id = incident_options[selected_label]
-
-if st.button("📄 Generate Incident Report", use_container_width=True):
-    try:
-        with st.spinner("Generating report from available investigation data..."):
-            rep_resp = requests.get(
-                f"{API_URL}/reports/{incident_id}",
-                headers=headers,
-                timeout=45
-            )
-
-        if rep_resp.status_code == 200:
-            report = rep_resp.json()
-
-            if not isinstance(report, dict):
-                st.error("Unexpected report format received.")
-                st.stop()
-
-            st.session_state["generated_report"] = report
-            st.session_state["generated_report_incident"] = incident_id
-            st.success("Incident report retrieved successfully!")
-
-        else:
-            st.error(
-                f"Report generation failed ({rep_resp.status_code}): "
-                f"{rep_resp.text[:1000]}"
-            )
-
-    except requests.RequestException as e:
-        st.error(f"Report request failed: {e}")
-
-# Display report saved in this session
-report = st.session_state.get("generated_report")
-report_incident = st.session_state.get("generated_report_incident")
-
-if report and report_incident == incident_id:
-    incident = report.get("incident", {}) or {}
-    investigations = report.get("investigations", []) or []
-
-    if not isinstance(incident, dict):
-        incident = {}
-
-    if not isinstance(investigations, list):
-        investigations = []
-
-    st.divider()
-    st.markdown("### 📊 Executive Summary")
-
-    title = incident.get("title", "Untitled Incident")
-    status = incident.get("status", "Unknown")
-    severity = incident.get("severity", "Not assessed")
-    events_count = incident.get("events_count", "Unavailable")
-
-    m1, m2, m3, m4 = st.columns(4)
-
-    with m1:
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">'
-            f'INCIDENT STATUS</div><div class="metric-value">'
-            f'{status}</div></div>',
-            unsafe_allow_html=True
-        )
-
-    with m2:
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">'
-            f'SEVERITY</div><div class="metric-value">'
-            f'{severity}</div></div>',
-            unsafe_allow_html=True
-        )
-
-    with m3:
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">'
-            f'EVENT COUNT</div><div class="metric-value">'
-            f'{events_count}</div></div>',
-            unsafe_allow_html=True
-        )
-
-    with m4:
-        st.markdown(
-            f'<div class="metric-card"><div class="metric-label">'
-            f'INVESTIGATION RUNS</div><div class="metric-value">'
-            f'{len(investigations)}</div></div>',
-            unsafe_allow_html=True
-        )
-
-    st.markdown("### 🗂️ Incident Information")
-
-    st.markdown(
-        f'<div class="panel">'
-        f'<div class="small-label">INCIDENT TITLE</div>'
-        f'<h3>{title}</h3>'
-        f'<div class="small-label">INCIDENT ID</div>'
-        f'<code>{incident_id}</code>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
-
-    st.divider()
-    st.markdown("### 🧠 Investigation History")
-
-    if investigations:
-        for index, investigation in enumerate(investigations):
-            if not isinstance(investigation, dict):
-                continue
-
-            inv_status = investigation.get("status", "Unknown")
-            agents = investigation.get("agents", {}) or {}
-
-            with st.expander(
-                f"Investigation Run {index + 1} — {inv_status}",
-                expanded=(index == len(investigations) - 1)
-            ):
-                st.write(f"**Status:** {inv_status}")
-
-                if isinstance(agents, dict) and agents:
-                    tabs = st.tabs(list(agents.keys()))
-
-                    for tab, (agent_name, output) in zip(tabs, agents.items()):
-                        with tab:
-                            st.markdown(f"#### {agent_name}")
-                            st.json(output)
-                else:
-                    st.info("No agent output is available for this run.")
-
+row = st.columns([4, 1.4])
+incident_id = row[0].selectbox("Incident", list(labels), key="rp_pick", format_func=lambda i: labels[i], label_visibility="collapsed")
+if row[1].button("Generate report", key="rp_gen", type="primary", use_container_width=True, icon=":material/description:"):
+    with st.spinner("Collecting incident, investigation and audit data…"):
+        d = api.fetch(f"/incidents/{incident_id}", ttl=0, force=True)
+        v = api.fetch(f"/incidents/{incident_id}/investigations", ttl=0, force=True)
+        a = api.fetch("/audit", {"incident_id": incident_id, "page_size": 200}, ttl=0, force=True)
+        legacy = api.fetch(f"/reports/{incident_id}", ttl=0, force=True)
+    failed = next((x for x in (d, v) if not x.ok), None)
+    if failed:
+        show_api_error(failed, "the incident report data", stop=False)
     else:
-        st.info("No investigation runs are recorded for this incident.")
+        st.session_state["rp_report"] = reporting.build_report(
+            d.data, v.data["investigations"], a.data if a.ok else None, legacy.data if legacy.ok else None)
+        st.session_state["rp_report_for"] = incident_id
 
-    st.divider()
-    st.markdown("### 📥 Export Report")
+report = st.session_state.get("rp_report")
+if not report:
+    st.markdown(empty_state("No report generated yet", "Select an incident and choose “Generate report”. The report is built only from recorded backend data."),
+                unsafe_allow_html=True)
+    st.stop()
 
-    report_json = json.dumps(report, indent=2, ensure_ascii=False)
+if st.session_state.get("rp_report_for") != incident_id:
+    st.markdown(notice(f'Showing the report generated for “{report["incident"].get("title")}”. Generate again to switch to the selected incident.', "warn"),
+                unsafe_allow_html=True)
 
-    st.download_button(
-        label="⬇️ Download Complete JSON Report",
-        data=report_json,
-        file_name=f"sentinelx_report_{incident_id[:8]}.json",
-        mime="application/json",
-        use_container_width=True
-    )
+name = (st.session_state.get("rp_report_for") or "incident")[:8]
+ex = st.columns([1, 1, 1, 3])
+ex[0].download_button("Export JSON", reporting.to_json(report), file_name=f"sentinelx_report_{name}.json", mime="application/json",
+                      use_container_width=True, key="rp_json", icon=":material/data_object:")
+ex[1].download_button("Export Markdown", reporting.to_markdown(report), file_name=f"sentinelx_report_{name}.md", mime="text/markdown",
+                      use_container_width=True, key="rp_md", icon=":material/article:")
+ex[2].download_button("Export HTML", reporting.to_html(report), file_name=f"sentinelx_report_{name}.html", mime="text/html",
+                      use_container_width=True, key="rp_html", icon=":material/print:")
+ex[3].markdown('<div class="sx-pager">Open the HTML export and use your browser’s Print → Save as PDF for a PDF copy.</div>', unsafe_allow_html=True)
 
-    st.caption(
-        "Export contains the report data returned by the SENTINELX backend."
-    )
-
-st.divider()
-
-st.markdown("### 🛡️ Reporting Principles")
-st.info(
-    "Reports display incident and investigation information returned by the backend. "
-    "Missing findings are shown as unavailable rather than invented."
-)
-
-st.caption(
-    "SENTINELX · Incident Reporting & Analytics · "
-    "Evidence-backed security intelligence"
-)
-
+st.markdown(V.header_kpis(report), unsafe_allow_html=True)
+s = V.sections(report)
+left, right = st.columns([2.1, 1])
+with left:
+    with st.container(key="sxp_rp_summary"):
+        st.markdown(section_title(report["incident"].get("title") or "Incident report", "Composed from recorded facts only."), unsafe_allow_html=True)
+        st.markdown('<div class="sx-sub" style="margin-top:0">Executive summary</div>' + s["summary"], unsafe_allow_html=True)
+    with st.container(key="sxp_rp_findings"):
+        st.markdown(section_title("Investigation findings"), unsafe_allow_html=True)
+        st.markdown(s["findings"], unsafe_allow_html=True)
+    with st.container(key="sxp_rp_agents"):
+        st.markdown(section_title("Agent findings"), unsafe_allow_html=True)
+        st.markdown(s["agents"], unsafe_allow_html=True)
+    with st.container(key="sxp_rp_timeline"):
+        st.markdown(section_title("Incident timeline"), unsafe_allow_html=True)
+        st.markdown(s["timeline"], unsafe_allow_html=True)
+with right:
+    with st.container(key="sxp_rp_details"):
+        st.markdown(section_title("Incident details"), unsafe_allow_html=True)
+        st.markdown(s["details"], unsafe_allow_html=True)
+    with st.container(key="sxp_rp_risk"):
+        st.markdown(section_title("Risk assessment & response"), unsafe_allow_html=True)
+        st.markdown(s["risk"], unsafe_allow_html=True)
+    with st.container(key="sxp_rp_evidence"):
+        st.markdown(section_title("Evidence summary"), unsafe_allow_html=True)
+        st.markdown(s["evidence"], unsafe_allow_html=True)
+        st.markdown(section_title("Audit"), unsafe_allow_html=True)
+        st.markdown(s["audit"], unsafe_allow_html=True)

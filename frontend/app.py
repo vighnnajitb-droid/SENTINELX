@@ -7,6 +7,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from sentinelx_ui.theme import apply_theme
 
+
 # ============================================================
 # 1. CONFIGURATION
 # ============================================================
@@ -25,7 +26,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Apply existing application theme
 apply_theme()
 
 
@@ -34,10 +34,12 @@ apply_theme()
 # ============================================================
 
 def render_html(content):
+
     """
     Render HTML directly.
     Avoids Markdown interpreting indented HTML as code blocks.
     """
+
     st.html(textwrap.dedent(content).strip())
 
 
@@ -48,7 +50,7 @@ def render_html(content):
 render_html("""
 <style>
 
-/* ---------------- PAGE LAYOUT ---------------- */
+/* PAGE LAYOUT */
 
 .block-container {
     max-width: 1500px;
@@ -63,7 +65,7 @@ render_html("""
     background: transparent;
 }
 
-/* ---------------- BRAND ---------------- */
+/* BRAND */
 
 .brand {
     font-size: 38px;
@@ -83,7 +85,7 @@ render_html("""
     margin-top: 7px;
 }
 
-/* ---------------- HERO ---------------- */
+/* HERO */
 
 .hero {
     background: linear-gradient(
@@ -128,7 +130,7 @@ render_html("""
     max-width: 650px;
 }
 
-/* ---------------- FEATURE SECTION ---------------- */
+/* FEATURE SECTION */
 
 .section-label {
     color: #f0f6ff;
@@ -170,7 +172,7 @@ render_html("""
     line-height: 1.8;
 }
 
-/* ---------------- LOGIN PANEL ---------------- */
+/* LOGIN PANEL */
 
 .login-panel {
     background: #0b1b30;
@@ -193,7 +195,7 @@ render_html("""
     margin-top: 9px;
 }
 
-/* ---------------- LOGIN FORM ---------------- */
+/* LOGIN FORM */
 
 div[data-testid="stForm"] {
     background: #0b192c;
@@ -241,7 +243,7 @@ div[data-testid="stFormSubmitButton"] button:hover {
     color: #ffffff;
 }
 
-/* ---------------- STATUS ---------------- */
+/* STATUS */
 
 .status-strip {
     background: #0b192c;
@@ -259,7 +261,7 @@ div[data-testid="stFormSubmitButton"] button:hover {
     font-size: 15px;
 }
 
-/* ---------------- FOOTER ---------------- */
+/* FOOTER */
 
 .footer {
     text-align: center;
@@ -269,9 +271,10 @@ div[data-testid="stFormSubmitButton"] button:hover {
     padding: 35px 0 10px 0;
 }
 
-/* ---------------- RESPONSIVE ---------------- */
+/* RESPONSIVE */
 
 @media (max-width: 900px) {
+
     .block-container {
         padding: 1rem;
     }
@@ -288,6 +291,7 @@ div[data-testid="stFormSubmitButton"] button:hover {
     .login-panel {
         padding: 22px;
     }
+
 }
 
 </style>
@@ -301,6 +305,9 @@ div[data-testid="stFormSubmitButton"] button:hover {
 if "token" not in st.session_state:
     st.session_state["token"] = None
 
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+
 
 # ============================================================
 # 5. AUTHENTICATION
@@ -309,6 +316,7 @@ if "token" not in st.session_state:
 def login(username, password):
 
     try:
+
         login_url = f"{API_URL}/auth/login"
 
         response = requests.post(
@@ -324,19 +332,29 @@ def login(username, password):
 
             try:
                 response_data = response.json()
+
             except ValueError:
-                st.error("Backend returned an invalid response.")
+
+                st.error(
+                    "Backend returned an invalid response."
+                )
                 return
 
             token = response_data.get("access_token")
 
             if token:
+
                 st.session_state["token"] = token
                 st.session_state["username"] = username
+
                 st.rerun()
 
             else:
-                st.error("Authentication token was not returned.")
+
+                st.error(
+                    "Authentication token was not returned."
+                )
+
                 st.write(
                     "Response fields:",
                     list(response_data.keys())
@@ -344,39 +362,78 @@ def login(username, password):
 
         elif response.status_code in (400, 401):
 
-            st.error("Login rejected by backend.")
-            st.write("HTTP Status:", response.status_code)
-            st.write("Request URL:", response.url)
+            st.error(
+                "Login rejected by backend. Check your credentials."
+            )
+
+        elif response.status_code == 429:
+
+            st.error(
+                "Too many login requests. Please wait before trying again."
+            )
+
+            retry_after = response.headers.get("Retry-After")
+
+            if retry_after:
+                st.info(
+                    f"Retry after: {retry_after} seconds."
+                )
+
+            st.caption(
+                "If this happens on the first attempt, "
+                "the backend rate-limit configuration needs investigation."
+            )
 
         else:
 
             st.error(
                 f"Login failed with HTTP {response.status_code}."
             )
+
             st.code(response.text[:500])
 
     except requests.Timeout:
-        st.error("Backend request timed out.")
+
+        st.error(
+            "Backend request timed out."
+        )
 
     except requests.ConnectionError:
-        st.error("Cannot connect to the SENTINELX backend.")
-        st.write("Configured API:", API_URL)
+
+        st.error(
+            "Cannot connect to the SENTINELX backend."
+        )
+
+        st.write(
+            "Configured API:",
+            API_URL
+        )
 
     except requests.RequestException as error:
-        st.error("Authentication request failed.")
-        st.code(type(error).__name__)
 
+        st.error(
+            "Authentication request failed."
+        )
+
+        st.code(
+            type(error).__name__
+        )
+
+
+# ============================================================
+# 6. LOGOUT
+# ============================================================
 
 def logout():
 
     st.session_state["token"] = None
-    st.session_state.pop("username", None)
+    st.session_state["username"] = None
 
     st.rerun()
 
 
 # ============================================================
-# 6. BRAND HEADER
+# 7. BRAND HEADER
 # ============================================================
 
 def brand_header():
@@ -397,7 +454,7 @@ def brand_header():
 
 
 # ============================================================
-# 7. LOGIN SCREEN
+# 8. LOGIN SCREEN
 # ============================================================
 
 if not st.session_state["token"]:
@@ -407,9 +464,7 @@ if not st.session_state["token"]:
         gap="large"
     )
 
-    # --------------------------------------------------------
-    # LEFT SIDE: BRAND AND FEATURES
-    # --------------------------------------------------------
+    # LEFT SIDE
 
     with left:
 
@@ -442,29 +497,37 @@ if not st.session_state["token"]:
         """)
 
         features = [
+
             (
                 "◈",
                 "INTELLIGENT DETECTION",
                 "Analyze incoming security events and identify suspicious activity."
             ),
+
             (
                 "⌕",
                 "DEEP INVESTIGATION",
                 "Connect event evidence and build investigation context."
             ),
+
             (
                 "⬡",
                 "RISK ASSESSMENT",
                 "Evaluate severity and confidence using available findings."
             ),
+
             (
                 "⛨",
                 "AUDIT & RESPONSE",
                 "Preserve accountability and support human-approved response."
             )
+
         ]
 
-        feature_columns = st.columns(2, gap="medium")
+        feature_columns = st.columns(
+            2,
+            gap="medium"
+        )
 
         for index, (icon, title, description) in enumerate(features):
 
@@ -488,13 +551,10 @@ if not st.session_state["token"]:
                 </div>
                 """)
 
-    # --------------------------------------------------------
-    # RIGHT SIDE: LOGIN
-    # --------------------------------------------------------
+    # RIGHT SIDE
 
     with right:
 
-        # Align login panel with hero section
         st.markdown(
             "<div style='height:85px'></div>",
             unsafe_allow_html=True
@@ -522,13 +582,15 @@ if not st.session_state["token"]:
 
             username = st.text_input(
                 "OPERATOR ID",
-                placeholder="Enter your username"
+                placeholder="Enter your username",
+                key="login_username"
             )
 
             password = st.text_input(
                 "ACCESS PASSWORD",
                 placeholder="Enter your password",
-                type="password"
+                type="password",
+                key="login_password"
             )
 
             submitted = st.form_submit_button(
@@ -568,11 +630,12 @@ if not st.session_state["token"]:
 
         with st.expander("Connection diagnostics"):
 
-            st.write("Configured API:", API_URL)
+            st.write(
+                "Configured API:",
+                API_URL
+            )
 
-    # --------------------------------------------------------
     # FOOTER
-    # --------------------------------------------------------
 
     render_html("""
     <div class="footer">
@@ -583,9 +646,11 @@ if not st.session_state["token"]:
 
 
 # ============================================================
-# 8. AUTHENTICATED SESSION
+# 9. AUTHENTICATED SESSION
 # ============================================================
 
 else:
 
-    st.switch_page("pages/1_Command_Center.py")
+    st.switch_page(
+        "pages/1_Command_Center.py"
+    )

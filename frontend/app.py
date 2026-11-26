@@ -34,12 +34,10 @@ apply_theme()
 # ============================================================
 
 def render_html(content):
-
     """
     Render HTML directly.
     Avoids Markdown interpreting indented HTML as code blocks.
     """
-
     st.html(textwrap.dedent(content).strip())
 
 
@@ -54,7 +52,7 @@ render_html("""
 
 .block-container {
     max-width: 1500px;
-    padding: 2rem 3rem 2rem 3rem;
+    padding: 2rem 3rem;
 }
 
 [data-testid="stAppViewContainer"] {
@@ -100,6 +98,7 @@ render_html("""
     margin-bottom: 28px;
     min-height: 300px;
     box-shadow: 0 12px 35px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
 }
 
 .eyebrow {
@@ -136,7 +135,7 @@ render_html("""
     color: #f0f6ff;
     font-size: 19px;
     font-weight: 800;
-    margin: 28px 0 18px 0;
+    margin: 28px 0 18px;
 }
 
 .feature-card {
@@ -145,12 +144,16 @@ render_html("""
     border-radius: 12px;
     padding: 21px;
     min-height: 155px;
+    height: 100%;
     margin-bottom: 15px;
-    transition: border-color 0.2s ease;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease,
+                background 0.2s ease;
 }
 
 .feature-card:hover {
     border-color: #00d9ff;
+    background: #12253c;
 }
 
 .feature-icon {
@@ -179,6 +182,7 @@ render_html("""
     border: 1px solid #16466d;
     border-radius: 15px 15px 0 0;
     padding: 30px;
+    box-sizing: border-box;
 }
 
 .login-heading {
@@ -200,8 +204,10 @@ render_html("""
 div[data-testid="stForm"] {
     background: #0b192c;
     border: 1px solid #16466d;
+    border-top: none;
     border-radius: 0 0 15px 15px;
     padding: 25px;
+    box-sizing: border-box;
 }
 
 div[data-testid="stTextInput"] label {
@@ -216,12 +222,16 @@ div[data-testid="stTextInput"] input {
     border-radius: 8px;
     color: #ffffff;
     min-height: 45px;
+    transition: border-color 0.2s ease,
+                box-shadow 0.2s ease;
 }
 
 div[data-testid="stTextInput"] input:focus {
     border-color: #00cfff;
-    box-shadow: 0 0 0 1px #00cfff;
+    box-shadow: 0 0 0 2px rgba(0, 207, 255, 0.14);
 }
+
+/* LOGIN BUTTON */
 
 div[data-testid="stFormSubmitButton"] button {
     min-height: 49px;
@@ -241,6 +251,11 @@ div[data-testid="stFormSubmitButton"] button:hover {
     border-color: #00d9ff;
     background: #10416b;
     color: #ffffff;
+    transform: translateY(-1px);
+}
+
+div[data-testid="stFormSubmitButton"] button:active {
+    transform: translateY(0);
 }
 
 /* STATUS */
@@ -254,11 +269,20 @@ div[data-testid="stFormSubmitButton"] button:hover {
     color: #d7e8fa;
     font-size: 13px;
     line-height: 1.8;
+    box-sizing: border-box;
 }
 
 .status-dot {
     color: #00e69a;
     font-size: 15px;
+}
+
+/* EXPANDER */
+
+div[data-testid="stExpander"] {
+    border-color: #16466d;
+    border-radius: 10px;
+    margin-top: 12px;
 }
 
 /* FOOTER */
@@ -268,7 +292,7 @@ div[data-testid="stFormSubmitButton"] button:hover {
     color: #718ba9;
     font-size: 10px;
     letter-spacing: 1.5px;
-    padding: 35px 0 10px 0;
+    padding: 35px 0 10px;
 }
 
 /* RESPONSIVE */
@@ -290,6 +314,47 @@ div[data-testid="stFormSubmitButton"] button:hover {
 
     .login-panel {
         padding: 22px;
+    }
+
+    .login-heading {
+        font-size: 26px;
+    }
+
+    .feature-card {
+        min-height: 145px;
+    }
+
+}
+
+@media (max-width: 600px) {
+
+    .block-container {
+        padding: 0.8rem;
+    }
+
+    .hero {
+        padding: 20px;
+    }
+
+    .hero-title {
+        font-size: 28px;
+    }
+
+    .hero-desc {
+        font-size: 13px;
+    }
+
+    .login-panel {
+        padding: 20px;
+    }
+
+    div[data-testid="stForm"] {
+        padding: 18px;
+    }
+
+    .footer {
+        font-size: 9px;
+        line-height: 1.8;
     }
 
 }
